@@ -1,0 +1,6 @@
+{
+  "LogPath": "./log/electron.log",
+  "LogMode": "debug",
+  "LogType": "dateFile",
+  "NumOfBackup": 90
+}
