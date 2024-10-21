@@ -99,6 +99,7 @@ export default function Home() {
   useEffect(() => {
     invoke('getOpenSetting').then((res) => {
       setSelectedPlace(res.displayPlace)
+      setDefaultImg(res.displayImage)
       setText(res.displayTxt)
       setHideSec(res.hideSec / 1000)
     })

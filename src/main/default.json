@@ -3,7 +3,7 @@
   "displayTxt": "CapsLock is ",
   "width": 160,
   "height": 200,
-  "hideSec": 1800,
+  "hideSec": 1000,
   "displayImage": "default",
   "LogPath": "./log/electron.log",
   "LogMode": "debug",

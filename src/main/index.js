@@ -26,12 +26,12 @@ let isCapsLockOn = false
 let HIDE_TIME = 900 // 正常情況下窗口顯示後的隱藏時間 (2秒)
 let timer = null
 let overLayPosition = null
+let allScreenDetail = null
 let cursor = null
 const overlayWindowProperty = { width: 135, height: 40 }
 
 async function createConfigFolder() {
   const configFolder = path.join(app.getPath('userData'), 'config')
-  console.log(configFolder)
 
   log.info(2, 'configFolder: ' + configFolder)
   try {
@@ -41,6 +41,27 @@ async function createConfigFolder() {
   } catch (error) {
     // console.error('Error creating config folder:', error)
     log.error('Error creating config folder:' + error)
+  }
+
+  const openSettingPath = path.join(app.getPath('userData'), 'config', 'opensetting.json')
+  // const defaultOpenSetting = path.join(__dirname, 'default.json')
+  const defaultData = {
+    displayPlace: 'MM',
+    displayTxt: 'CapsLock is ',
+    width: 160,
+    height: 200,
+    hideSec: 1000,
+    displayImage: 'default',
+    LogPath: './log/electron.log',
+    LogMode: 'debug',
+    LogType: 'dateFile',
+    NumOfBackup: 90
+  }
+
+  try {
+    await fs.access(openSettingPath) // 檢查資料夾是否存在
+  } catch {
+    await fs.writeFile(openSettingPath, JSON.stringify(defaultData))
   }
 }
 
@@ -87,10 +108,10 @@ async function updateOpenSetting(newSettings) {
 async function readOpenSetting() {
   try {
     // 假設你將設定檔放在 AppData 的 Roaming 目錄中
-    const configPath = path.join(app.getPath('userData'), 'config', 'opensetting.json')
+    const openSeggingPath = path.join(app.getPath('userData'), 'config', 'opensetting.json')
 
     // 讀取配置檔案
-    const data = await fs.readFile(configPath, 'utf8')
+    const data = await fs.readFile(openSeggingPath, 'utf8')
     const settings = JSON.parse(data)
 
     // console.log('Settings loaded:', settings)
@@ -102,13 +123,87 @@ async function readOpenSetting() {
   }
 }
 
+function setOverlayBounds(displace, overlayW, overlayH) {
+  overLayPosition = allScreenDetail.map((coordinate) => {
+    const xDividedByThree = coordinate.width / 3
+    const yDividedByThree = coordinate.height / 3
+
+    // let xOffset = (xDividedByThree - overlayWindowProperty.width) / 2
+    // let yOffset = (yDividedByThree - overlayWindowProperty.height) / 2
+    let xOffset = (xDividedByThree - overlayW) / 2
+    let yOffset = (yDividedByThree - overlayH) / 2
+
+    const displayPlace = [
+      ['TL', 'TM', 'TR'],
+      ['ML', 'MM', 'MR'],
+      ['BL', 'BM', 'BR']
+    ]
+    const newDisplayPlace = displayPlace.flat(1)
+    const windowA = []
+
+    newDisplayPlace.forEach((txt, index) => {
+      const newCoordinate = { x: 0, y: 0 }
+
+      const firstWord = txt.slice(0, 1)
+      const secondWord = txt.slice(1, 2)
+
+      // x 軸判斷
+      switch (secondWord) {
+        case 'L':
+          newCoordinate.x = coordinate.startPointX + 50
+          break
+        case 'M':
+          newCoordinate.x = coordinate.startPointX + xDividedByThree + xOffset
+          break
+        case 'R':
+          newCoordinate.x = coordinate.startPointX + xDividedByThree * 3 - overlayW - 50
+          break
+
+        default:
+          break
+      }
+
+      // y 軸判斷
+      switch (firstWord) {
+        case 'T':
+          newCoordinate.y = coordinate.startPointY + 50
+          break
+        case 'M':
+          newCoordinate.y = coordinate.startPointY + yDividedByThree + 50
+          break
+        case 'B':
+          newCoordinate.y = coordinate.startPointY + yDividedByThree * 3 - overlayH - 50
+          break
+
+        default:
+          break
+      }
+
+      windowA.push({ [txt]: newCoordinate })
+    })
+
+    return { ...coordinate, windowA }
+  })
+  const findScreen = overLayPosition.find(
+    (v) => cursor.x > v.startPointX && cursor.x < v.startPointX + v.width
+  )
+  const findPlace = findScreen?.windowA.find((place) => Object.keys(place)[0] === displace)
+
+  const coordinate = { x: findPlace[displace].x, y: findPlace[displace].y }
+
+  overlayWindow.setBounds({ ...coordinate, ...overLayPosition })
+}
+
 function createTray(win) {
   const tray = new Tray(icon)
   const contextMenu = Menu.buildFromTemplate([
     { label: 'show', click: () => win.show() },
     {
       label: 'exit',
-      click: () => app.quit()
+      click: () => {
+        BrowserWindow.getAllWindows().forEach((window) => window.close())
+        app.quit()
+      }
     }
   ])
   tray.setToolTip('electron_tester')
@@ -149,7 +244,7 @@ async function createWindow() {
 
   mainWindow.on('ready-to-show', () => {
     const screenPrpperty = screen.getAllDisplays()
-    const screenArray = screenPrpperty.map((v) => {
+     allScreenDetail = screenPrpperty.map((v) => {
       return {
         startPointX: v.bounds.x,
         startPointY: v.bounds.y,
@@ -161,7 +256,7 @@ async function createWindow() {
     //預設位置 x y
 
     //計算每個位置內，window 的置中 x y
-    overLayPosition = screenArray.map((coordinate) => {
+    overLayPosition = allScreenDetail.map((coordinate) => {
       const xDividedByThree = coordinate.width / 3
       const yDividedByThree = coordinate.height / 3
 
@@ -185,13 +280,14 @@ async function createWindow() {
         // x 軸判斷
         switch (secondWord) {
           case 'L':
-            newCoordinate.x = coordinate.startPointX + xOffset
+            newCoordinate.x = coordinate.startPointX + 50
             break
           case 'M':
             newCoordinate.x = coordinate.startPointX + xDividedByThree + xOffset
             break
           case 'R':
-            newCoordinate.x = coordinate.startPointX + xDividedByThree * 2 + xOffset
+            newCoordinate.x =
+              coordinate.startPointX + xDividedByThree * 3 - overlayWindowProperty.width - 50
             break
 
           default:
@@ -201,13 +297,14 @@ async function createWindow() {
         // y 軸判斷
         switch (firstWord) {
           case 'T':
-            newCoordinate.y = coordinate.startPointY + yOffset
+            newCoordinate.y = coordinate.startPointY + 50
             break
           case 'M':
-            newCoordinate.y = coordinate.startPointY + yDividedByThree + yOffset
+            newCoordinate.y = coordinate.startPointY + yDividedByThree + 50
             break
           case 'B':
-            newCoordinate.y = coordinate.startPointY + yDividedByThree * 2 + yOffset
+            newCoordinate.y =
+              coordinate.startPointY + yDividedByThree * 3 - overlayWindowProperty.height - 50
             break
 
           default:
@@ -363,17 +460,18 @@ function registerCapsLockShortcut() {
           cursor = newCursor
 
           readOpenSetting().then((res) => {
-            const displace = res.displayPlace
-            const findScreen = overLayPosition.find(
-              (v) => newCursor.x > v.startPointX && newCursor.x < v.startPointX + v.width
-            )
-            const findPlace = findScreen?.windowA.find(
-              (place) => Object.keys(place)[0] === displace
-            )
+            setOverlayBounds(res.displayPlace, res.width, res.height)
+            // const displace = res.displayPlace
+            // const findScreen = overLayPosition.find(
+            //   (v) => newCursor.x > v.startPointX && newCursor.x < v.startPointX + v.width
+            // )
+            // const findPlace = findScreen?.windowA.find(
+            //   (place) => Object.keys(place)[0] === displace
+            // )
 
-            const coordinate = { x: findPlace[displace].x, y: findPlace[displace].y }
+            // const coordinate = { x: findPlace[displace].x, y: findPlace[displace].y }
 
-            overlayWindow.setBounds({ ...coordinate, ...overLayPosition })
+            // overlayWindow.setBounds({ ...coordinate, ...overLayPosition })
           })
         }
 
@@ -550,7 +648,7 @@ app.whenReady().then(() => {
       } else {
         output.errorMsg = 'cancel delete image'
       }
-      
+
       return output
     })
 
